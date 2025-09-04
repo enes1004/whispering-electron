@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+*.log
+*.tmp
+temp_*.py
+temp_audio_*
+.DS_Store
+.env
+.vscode/

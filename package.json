@@ -1,0 +1,22 @@
+{
+  "name": "whispering-electron",
+  "version": "1.0.0",
+  "description": "Electron app to integrate voice recording and openai/whisper speech to text conversion",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --dev --no-sandbox",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["electron", "whisper", "speech-to-text", "voice-recording"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^38.0.0"
+  },
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "fluent-ffmpeg": "^2.1.3",
+    "node-record-lpcm16": "^1.0.1"
+  }
+}
