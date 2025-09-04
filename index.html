@@ -213,6 +213,17 @@
             </div>
 
             <div class="control-group">
+                <label for="whisperModel">Whisperモデル:</label>
+                <select id="whisperModel">
+                    <option value="tiny">tiny (最速、精度低)</option>
+                    <option value="base" selected>base (バランス)</option>
+                    <option value="small">small (高精度)</option>
+                    <option value="medium">medium (最高精度、遅い)</option>
+                    <option value="large">large (最高精度、最も遅い)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
                 <label for="segmentDuration">セグメント時間 (秒):</label>
                 <input type="number" id="segmentDuration" value="5" min="3" max="10">
             </div>

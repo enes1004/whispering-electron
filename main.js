@@ -5,6 +5,12 @@ const { exec, spawn } = require('child_process');
 
 let mainWindow;
 
+// Create temp directory if it doesn't exist
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -40,7 +46,7 @@ app.on('activate', () => {
 });
 
 // Handle audio processing with Whisper
-ipcMain.handle('process-audio', async (event, audioFilePath, language = 'ja') => {
+ipcMain.handle('process-audio', async (event, audioFilePath, language = 'ja', model = 'base') => {
   return new Promise((resolve, reject) => {
     const useMockResponse = process.argv.includes('--mock-response');
     
@@ -60,14 +66,14 @@ import sys
 
 try:
     import whisper
-    model = whisper.load_model("base")
+    model = whisper.load_model("${model}")
     result = model.transcribe("${audioFilePath}", language="${language}")
     print(json.dumps({"text": result["text"], "language": result["language"]}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 `;
 
-    const tempPythonFile = path.join(__dirname, 'temp_whisper.py');
+    const tempPythonFile = path.join(tempDir, 'temp_whisper.py');
     fs.writeFileSync(tempPythonFile, pythonScript);
 
     exec(`python3 ${tempPythonFile}`, (error, stdout, stderr) => {
@@ -94,7 +100,7 @@ except Exception as e:
 });
 
 // Handle audio blob processing with Whisper
-ipcMain.handle('process-audio-blob', async (event, base64Data, language = 'ja', segmentIndex = 0) => {
+ipcMain.handle('process-audio-blob', async (event, base64Data, language = 'ja', segmentIndex = 0, model = 'base') => {
   return new Promise((resolve, reject) => {
     const useMockResponse = process.argv.includes('--mock-response');
     
@@ -114,7 +120,7 @@ ipcMain.handle('process-audio-blob', async (event, base64Data, language = 'ja', 
       return;
     }
 
-    const tempAudioFile = path.join(__dirname, `temp_audio_${segmentIndex}_${Date.now()}.webm`);
+    const tempAudioFile = path.join(tempDir, `temp_audio_${segmentIndex}_${Date.now()}.webm`);
     
     try {
       // Convert base64 to buffer and write to file
@@ -128,14 +134,14 @@ import os
 
 try:
     import whisper
-    model = whisper.load_model("base")
+    model = whisper.load_model("${model}")
     result = model.transcribe("${tempAudioFile}", language="${language}")
     print(json.dumps({"text": result["text"], "language": result["language"]}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
 `;
 
-      const tempPythonFile = path.join(__dirname, `temp_whisper_${segmentIndex}.py`);
+      const tempPythonFile = path.join(tempDir, `temp_whisper_${segmentIndex}.py`);
       fs.writeFileSync(tempPythonFile, pythonScript);
 
       exec(`python3 ${tempPythonFile}`, (error, stdout, stderr) => {

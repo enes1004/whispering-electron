@@ -5,6 +5,7 @@ build/
 *.tmp
 temp_*.py
 temp_audio_*
+temp/
 .DS_Store
 .env
 .vscode/

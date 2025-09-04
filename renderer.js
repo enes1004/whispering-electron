@@ -4,7 +4,8 @@ class WhisperRecorder {
         this.mediaRecorder = null;
         this.currentSegmentChunks = [];
         this.allChunks = [];
-        this.segmentCounter = 0;
+        this.globalSegmentCounter = 0;  // Persistent counter across recording sessions
+        this.currentSessionStartSegment = 0;  // Track where current session started
         this.startTime = null;
         this.timerInterval = null;
         this.segmentTimer = null;
@@ -19,6 +20,7 @@ class WhisperRecorder {
         this.stopBtn = document.getElementById('stopBtn');
         this.audioSourceSelect = document.getElementById('audioSource');
         this.languageSelect = document.getElementById('language');
+        this.whisperModelSelect = document.getElementById('whisperModel');
         this.segmentDurationInput = document.getElementById('segmentDuration');
         this.overlapDurationInput = document.getElementById('overlapDuration');
         this.statusDiv = document.getElementById('status');
@@ -70,24 +72,159 @@ class WhisperRecorder {
     async getAudioConstraints() {
         const audioSource = this.audioSourceSelect.value;
         
-        // For now, system audio and mic+system both just use microphone
-        // to avoid the system audio capture errors mentioned in the issue
-        // In a production environment, proper system audio capture would need
-        // specialized APIs or browser extensions
-        
         if (audioSource === 'system') {
-            // Temporarily disabled due to browser compatibility issues
-            // Return microphone as fallback
-            console.warn('System audio capture temporarily disabled, using microphone');
-            return { audio: true, video: false };
+            return await this.getSystemAudioStream();
         } else if (audioSource === 'mic+system') {
-            // Temporarily disabled due to browser compatibility issues
-            // Return microphone as fallback
-            console.warn('Mixed audio capture temporarily disabled, using microphone');
-            return { audio: true, video: false };
+            return await this.getMixedAudioStream();
         }
         
+        // Default to microphone only
         return { audio: true, video: false };
+    }
+
+    async getSystemAudioStream() {
+        try {
+            // Check if getDisplayMedia is available
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                throw new Error('システムオーディオキャプチャはこのブラウザでサポートされていません。');
+            }
+
+            // Request permission for screen capture with audio
+            const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                audio: true, 
+                video: false 
+            });
+            
+            // Check if audio track is available
+            const audioTracks = stream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                stream.getTracks().forEach(track => track.stop());
+                throw new Error('システムオーディオが利用できません。システムオーディオ共有を有効にしてください。');
+            }
+
+            return stream;
+        } catch (error) {
+            console.warn('System audio capture failed:', error.message);
+            
+            // Show permission dialog
+            const userResponse = await this.showAudioPermissionDialog(
+                'システムオーディオの取得に失敗しました。',
+                error.message + '\n\nマイクを代替として使用しますか？'
+            );
+            
+            if (userResponse) {
+                // Fall back to microphone
+                return { audio: true, video: false };
+            } else {
+                throw new Error('システムオーディオの取得がキャンセルされました。');
+            }
+        }
+    }
+
+    async getMixedAudioStream() {
+        try {
+            // First get microphone
+            const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            
+            try {
+                // Try to get system audio
+                const systemStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    audio: true, 
+                    video: false 
+                });
+
+                // Check if system audio is available
+                const systemAudioTracks = systemStream.getAudioTracks();
+                if (systemAudioTracks.length === 0) {
+                    systemStream.getTracks().forEach(track => track.stop());
+                    throw new Error('システムオーディオが利用できません');
+                }
+
+                // Create audio context to mix streams
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const destination = audioContext.createMediaStreamDestination();
+                
+                // Connect microphone
+                const micSource = audioContext.createMediaStreamSource(micStream);
+                const micGain = audioContext.createGain();
+                micGain.gain.value = 0.7; // Reduce mic volume slightly
+                micSource.connect(micGain);
+                micGain.connect(destination);
+                
+                // Connect system audio
+                const systemSource = audioContext.createMediaStreamSource(systemStream);
+                const systemGain = audioContext.createGain();
+                systemGain.gain.value = 0.8; // System audio at slightly higher volume
+                systemSource.connect(systemGain);
+                systemGain.connect(destination);
+                
+                // Clean up original streams
+                micStream.getTracks().forEach(track => track.stop());
+                systemStream.getTracks().forEach(track => track.stop());
+                
+                return destination.stream;
+                
+            } catch (systemError) {
+                console.warn('System audio mixing failed, using microphone only:', systemError.message);
+                
+                const userResponse = await this.showAudioPermissionDialog(
+                    'システムオーディオとの混合に失敗しました。',
+                    systemError.message + '\n\nマイクのみを使用しますか？'
+                );
+                
+                if (userResponse) {
+                    return micStream;
+                } else {
+                    micStream.getTracks().forEach(track => track.stop());
+                    throw new Error('音声取得がキャンセルされました。');
+                }
+            }
+            
+        } catch (micError) {
+            console.error('Microphone access failed:', micError.message);
+            throw new Error('マイクへのアクセスに失敗しました: ' + micError.message);
+        }
+    }
+
+    async showAudioPermissionDialog(title, message) {
+        return new Promise((resolve) => {
+            const dialog = document.createElement('div');
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            dialog.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center;">
+                    <h3 style="color: #333; margin-bottom: 15px;">${title}</h3>
+                    <p style="color: #666; margin-bottom: 25px; line-height: 1.5;">${message}</p>
+                    <div>
+                        <button id="audioDialogYes" style="background: #007acc; color: white; border: none; padding: 10px 20px; margin: 0 10px; border-radius: 5px; cursor: pointer;">はい</button>
+                        <button id="audioDialogNo" style="background: #ccc; color: #333; border: none; padding: 10px 20px; margin: 0 10px; border-radius: 5px; cursor: pointer;">いいえ</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(dialog);
+            
+            document.getElementById('audioDialogYes').onclick = () => {
+                document.body.removeChild(dialog);
+                resolve(true);
+            };
+            
+            document.getElementById('audioDialogNo').onclick = () => {
+                document.body.removeChild(dialog);
+                resolve(false);
+            };
+        });
     }
 
     async startRecording() {
@@ -99,8 +236,16 @@ class WhisperRecorder {
             
             this.updateStatus('録音開始中...', 'processing');
             
-            const constraints = await this.getAudioConstraints();
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            const streamOrConstraints = await this.getAudioConstraints();
+            let stream;
+            
+            if (streamOrConstraints instanceof MediaStream) {
+                // We got a stream directly (system audio or mixed)
+                stream = streamOrConstraints;
+            } else {
+                // We got constraints, use getUserMedia
+                stream = await navigator.mediaDevices.getUserMedia(streamOrConstraints);
+            }
             
             // Check if MediaRecorder is supported
             if (!window.MediaRecorder) {
@@ -109,7 +254,7 @@ class WhisperRecorder {
             
             this.currentSegmentChunks = [];
             this.allChunks = [];
-            this.segmentCounter = 0;
+            this.currentSessionStartSegment = this.globalSegmentCounter;  // Remember where this session started
             this.startTime = Date.now();
             this.isRecording = true;
             
@@ -139,7 +284,7 @@ class WhisperRecorder {
     startSegmentedRecording(stream) {
         const segmentDuration = parseInt(this.segmentDurationInput.value) * 1000; // Convert to ms
         
-        this.processNextSegment(stream, 0);
+        this.processNextSegment(stream, this.globalSegmentCounter);
     }
 
     async processNextSegment(stream, segmentIndex) {
@@ -186,7 +331,8 @@ class WhisperRecorder {
         const nextSegmentDelay = segmentDuration - overlapDuration;
         this.segmentTimer = setTimeout(() => {
             if (this.isRecording) {
-                this.processNextSegment(stream, segmentIndex + 1);
+                this.globalSegmentCounter++;  // Increment the global counter
+                this.processNextSegment(stream, this.globalSegmentCounter);
             }
         }, nextSegmentDelay);
     }
@@ -203,7 +349,8 @@ class WhisperRecorder {
             
             // Process with Whisper via main process
             const language = this.languageSelect.value;
-            const result = await window.electronAPI.processAudioBlob(base64Data, language, segmentIndex);
+            const model = this.whisperModelSelect.value;
+            const result = await window.electronAPI.processAudioBlob(base64Data, language, segmentIndex, model);
             
             // Add to text output
             this.addTranscribedText(result.text, segmentIndex);
