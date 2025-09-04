@@ -32,6 +32,25 @@ class WhisperRecorder {
         this.startBtn.addEventListener('click', () => this.startRecording());
         this.stopBtn.addEventListener('click', () => this.stopRecording());
         this.saveBtn.addEventListener('click', () => this.saveText());
+        
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', (event) => {
+            // Ctrl/Cmd + R to start/stop recording
+            if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+                event.preventDefault();
+                if (this.isRecording) {
+                    this.stopRecording();
+                } else {
+                    this.startRecording();
+                }
+            }
+            
+            // Ctrl/Cmd + S to save
+            if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+                event.preventDefault();
+                this.saveText();
+            }
+        });
     }
 
     updateStatus(message, type) {
@@ -80,10 +99,20 @@ class WhisperRecorder {
 
     async startRecording() {
         try {
+            // Check for browser support
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('このブラウザは音声録音をサポートしていません。');
+            }
+            
             this.updateStatus('録音開始中...', 'processing');
             
             const constraints = await this.getAudioConstraints();
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Check if MediaRecorder is supported
+            if (!window.MediaRecorder) {
+                throw new Error('このブラウザはMediaRecorderをサポートしていません。');
+            }
             
             this.mediaRecorder = new MediaRecorder(stream, {
                 mimeType: 'audio/webm;codecs=opus'
@@ -104,6 +133,11 @@ class WhisperRecorder {
                 this.processCurrentSegment();
             };
             
+            this.mediaRecorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event.error);
+                this.updateStatus('録音エラー: ' + event.error.message, 'ready');
+            };
+            
             this.mediaRecorder.start();
             this.isRecording = true;
             
@@ -122,6 +156,11 @@ class WhisperRecorder {
         } catch (error) {
             console.error('Error starting recording:', error);
             this.updateStatus('録音開始エラー: ' + error.message, 'ready');
+            
+            // Reset UI on error
+            this.startBtn.disabled = false;
+            this.startBtn.classList.remove('recording');
+            this.stopBtn.disabled = true;
         }
     }
 
@@ -189,7 +228,8 @@ class WhisperRecorder {
 
     addTranscribedText(text, segmentIndex) {
         const currentText = this.textOutput.value;
-        const newText = currentText + (currentText ? '\n' : '') + `[${segmentIndex + 1}] ${text}`;
+        const timestamp = new Date().toLocaleTimeString('ja-JP');
+        const newText = currentText + (currentText ? '\n' : '') + `[${timestamp}] ${text}`;
         this.textOutput.value = newText;
         
         // Auto-scroll to bottom

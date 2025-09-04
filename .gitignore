@@ -8,3 +8,9 @@ temp_audio_*
 .DS_Store
 .env
 .vscode/
+logs/
+*.wav
+*.webm
+*.mp3
+__pycache__/
+*.pyc
