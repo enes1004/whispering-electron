@@ -4,8 +4,9 @@
   "description": "Electron app to integrate voice recording and openai/whisper speech to text conversion",
   "main": "main.js",
   "scripts": {
-    "start": "electron . --no-sandbox",
-    "dev": "electron . --dev --no-sandbox",
+    "start": "electron . --no-sandbox --mock-response",
+    "dev": "electron . --dev --no-sandbox --mock-response",
+    "start-real": "electron . --no-sandbox",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["electron", "whisper", "speech-to-text", "voice-recording"],

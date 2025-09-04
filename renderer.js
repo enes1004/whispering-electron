@@ -74,19 +74,11 @@ class WhisperRecorder {
         
         try {
             if (audioSource === 'system') {
-                // System audio only
-                constraints = {
-                    audio: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: 'screen'
-                        }
-                    },
-                    video: false
-                };
+                // For system audio, we'll use getDisplayMedia with audio
+                return 'displayMedia';
             } else if (audioSource === 'mic+system') {
-                // This is a simplified approach - in a real implementation,
-                // you would need to mix two audio streams
+                // For now, just use microphone as mixing requires complex implementation
+                // In a real production app, you would need to capture both streams and mix them
                 constraints = { audio: true, video: false };
             }
         } catch (error) {
@@ -107,7 +99,20 @@ class WhisperRecorder {
             this.updateStatus('録音開始中...', 'processing');
             
             const constraints = await this.getAudioConstraints();
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            let stream;
+            
+            if (constraints === 'displayMedia') {
+                // For system audio capture
+                if (!navigator.mediaDevices.getDisplayMedia) {
+                    throw new Error('このブラウザはシステムオーディオキャプチャをサポートしていません。');
+                }
+                stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    audio: true, 
+                    video: false 
+                });
+            } else {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+            }
             
             // Check if MediaRecorder is supported
             if (!window.MediaRecorder) {
@@ -126,11 +131,18 @@ class WhisperRecorder {
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
                     this.audioChunks.push(event.data);
+                    // If this is from requestData(), process the segment
+                    if (this.isRecording) {
+                        this.processSegment();
+                    }
                 }
             };
             
             this.mediaRecorder.onstop = () => {
-                this.processCurrentSegment();
+                // Process any remaining chunks when recording stops
+                if (this.audioChunks.length > 0) {
+                    this.processCurrentSegment();
+                }
             };
             
             this.mediaRecorder.onerror = (event) => {
@@ -166,31 +178,38 @@ class WhisperRecorder {
 
     startSegmentedRecording() {
         const segmentDuration = parseInt(this.segmentDurationInput.value) * 1000; // Convert to ms
-        const overlapDuration = parseInt(this.overlapDurationInput.value) * 1000; // Convert to ms
         
+        // Start processing segments at regular intervals
         this.recordingTimer = setInterval(() => {
-            if (this.isRecording) {
-                this.processSegment();
-                this.segmentCounter++;
+            if (this.isRecording && this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                this.requestSegmentData();
             }
-        }, segmentDuration - overlapDuration);
+        }, segmentDuration);
+    }
+
+    requestSegmentData() {
+        // Request data from MediaRecorder without stopping it
+        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+            this.mediaRecorder.requestData();
+        }
     }
 
     async processSegment() {
-        if (!this.mediaRecorder || this.mediaRecorder.state !== 'recording') return;
-        
-        try {
-            // Create a new recorder for this segment
+        // This method is called by ondataavailable when requestData() is called
+        if (this.audioChunks.length > 0) {
             const segmentChunks = [...this.audioChunks];
-            this.audioChunks = []; // Reset for next segment
+            // Don't clear audioChunks here to maintain overlap
             
-            if (segmentChunks.length > 0) {
-                const audioBlob = new Blob(segmentChunks, { type: 'audio/webm;codecs=opus' });
-                await this.processAudioBlob(audioBlob, this.segmentCounter);
-            }
+            const audioBlob = new Blob(segmentChunks, { type: 'audio/webm;codecs=opus' });
+            await this.processAudioBlob(audioBlob, this.segmentCounter);
+            this.segmentCounter++;
             
-        } catch (error) {
-            console.error('Error processing segment:', error);
+            // Clear old chunks to prevent memory buildup, but keep some for overlap
+            const overlapDuration = parseInt(this.overlapDurationInput.value);
+            const segmentDuration = parseInt(this.segmentDurationInput.value);
+            const keepRatio = overlapDuration / segmentDuration;
+            const chunksToKeep = Math.floor(this.audioChunks.length * keepRatio);
+            this.audioChunks = this.audioChunks.slice(-chunksToKeep);
         }
     }
 
@@ -212,7 +231,7 @@ class WhisperRecorder {
             const base64Data = btoa(binaryString);
             
             // Process with Whisper via main process
-            const language = this.languageSelect.value === 'auto' ? null : this.languageSelect.value;
+            const language = this.languageSelect.value;
             const result = await window.electronAPI.processAudioBlob(base64Data, language, segmentIndex);
             
             // Add to text output

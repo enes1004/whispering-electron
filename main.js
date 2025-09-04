@@ -42,22 +42,26 @@ app.on('activate', () => {
 // Handle audio processing with Whisper
 ipcMain.handle('process-audio', async (event, audioFilePath, language = 'ja') => {
   return new Promise((resolve, reject) => {
+    const useMockResponse = process.argv.includes('--mock-response');
+    
+    if (useMockResponse) {
+      // Mock response for demonstration
+      const result = {
+        "text": "これはテスト音声の変換結果です。実際の環境では、Whisperモデルが音声を認識してテキストに変換します。",
+        "language": language
+      };
+      resolve(result);
+      return;
+    }
+
     const pythonScript = `
 import json
 import sys
 
 try:
-    # Mock Whisper functionality for demonstration
-    # In a real environment with internet access, you would use:
-    # import whisper
-    # model = whisper.load_model("base")
-    # result = model.transcribe("${audioFilePath}", language="${language}")
-    
-    # Mock response for demonstration
-    result = {
-        "text": "これはテスト音声の変換結果です。実際の環境では、Whisperモデルが音声を認識してテキストに変換します。",
-        "language": "${language}"
-    }
+    import whisper
+    model = whisper.load_model("base")
+    result = model.transcribe("${audioFilePath}", language="${language}")
     print(json.dumps({"text": result["text"], "language": result["language"]}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
@@ -92,6 +96,24 @@ except Exception as e:
 // Handle audio blob processing with Whisper
 ipcMain.handle('process-audio-blob', async (event, base64Data, language = 'ja', segmentIndex = 0) => {
   return new Promise((resolve, reject) => {
+    const useMockResponse = process.argv.includes('--mock-response');
+    
+    if (useMockResponse) {
+      // Mock response for demonstration with varied content
+      const mockTexts = [
+        "こんにちは、これは音声認識のテストです。",
+        "リアルタイム音声変換が正常に動作しています。",
+        "このセグメントでは別の内容が話されています。",
+        "オーバーラップ機能も適切に動作していることを確認できます。"
+      ];
+      const result = {
+        "text": mockTexts[segmentIndex % mockTexts.length],
+        "language": language
+      };
+      resolve(result);
+      return;
+    }
+
     const tempAudioFile = path.join(__dirname, `temp_audio_${segmentIndex}_${Date.now()}.webm`);
     
     try {
@@ -105,17 +127,9 @@ import sys
 import os
 
 try:
-    # Mock Whisper functionality for demonstration
-    # In a real environment with internet access, you would use:
-    # import whisper
-    # model = whisper.load_model("base")
-    # result = model.transcribe("${tempAudioFile}", language="${language}")
-    
-    # Mock response for demonstration
-    result = {
-        "text": "これはテスト音声の変換結果です。実際の環境では、Whisperモデルが音声を認識してテキストに変換します。",
-        "language": "${language}"
-    }
+    import whisper
+    model = whisper.load_model("base")
+    result = model.transcribe("${tempAudioFile}", language="${language}")
     print(json.dumps({"text": result["text"], "language": result["language"]}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
