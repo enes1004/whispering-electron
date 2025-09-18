@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+*.log
+*.tmp
+temp_*.py
+temp_audio_*
+temp/
+.DS_Store
+.env
+.vscode/
+logs/
+*.wav
+*.webm
+*.mp3
+__pycache__/
+*.pyc

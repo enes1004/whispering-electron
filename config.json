@@ -1,0 +1,29 @@
+{
+  "app": {
+    "name": "Whispering Electron",
+    "version": "1.0.0",
+    "description": "Real-time speech-to-text conversion using OpenAI Whisper"
+  },
+  "whisper": {
+    "model": "base",
+    "default_language": "ja",
+    "supported_languages": [
+      {"code": "ja", "name": "日本語"},
+      {"code": "en", "name": "English"},
+      {"code": "auto", "name": "自動検出"}
+    ]
+  },
+  "recording": {
+    "default_segment_duration": 5,
+    "default_overlap_duration": 2,
+    "max_segment_duration": 10,
+    "min_segment_duration": 3,
+    "supported_formats": ["webm", "wav", "mp3"],
+    "sample_rate": 16000
+  },
+  "ui": {
+    "theme": "light",
+    "auto_scroll": true,
+    "save_format": "txt"
+  }
+}
